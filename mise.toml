@@ -1,0 +1,14 @@
+[tools]
+terraform = "1.16.5"
+kubectl   = "1.37.1"
+helm      = "4.3.0"
+kind      = "0.33.0"
+k9s = "0.51.0"
+
+[env]
+TF_VAR_cluster_name   = "k8s-in-production"
+TF_VAR_kubeconfig_dir = "../../"
+
+[tasks."test:access"]
+description = "Verify RBAC permissions and Kyverno policies against the running cluster"
+run         = "bash tests/verify-access.sh"
