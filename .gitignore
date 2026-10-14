@@ -1,0 +1,16 @@
+# Kubeconfig files (contain SA tokens — never commit)
+kubeconfig-*.yaml
+
+# Terraform state and sensitive artefacts
+*/**/terraform.tfstate
+*/**/terraform.tfstate.*
+*/**/terraform.tfstate.*.*
+*/**/.terraform/
+*/**/*.tfvars
+*/**/admin.kubeconfig
+
+# Environment variables / secrets
+.env
+
+# IDE
+.idea/
