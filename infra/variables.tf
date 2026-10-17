@@ -45,3 +45,9 @@ variable "istio_operator_version" {
   type        = string
   default     = "1.30.6"
 }
+
+variable "vm_stack_chart_version" {
+  description = "VictoriaMetrics K8s Stack Helm chart version"
+  type        = string
+  default     = "0.96.0"
+}
