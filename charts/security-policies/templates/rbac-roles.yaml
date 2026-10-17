@@ -1,0 +1,27 @@
+{{- range $role := .Values.rbac.roles }}
+{{- range $ns := $role.namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $role.name }}
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+rules:
+{{- range $.Values.rbac.commonRules }}
+  - apiGroups:
+    {{- range .apiGroups }}
+      - {{ . | quote }}
+    {{- end }}
+    resources:
+    {{- range .resources }}
+      - {{ . | quote }}
+    {{- end }}
+    verbs:
+    {{- range $role.verbs }}
+      - {{ . | quote }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

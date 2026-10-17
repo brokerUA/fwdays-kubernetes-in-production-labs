@@ -1,0 +1,60 @@
+{{- if .Values.policies.personLabel.enabled }}
+{{- $apiVersion := "admissionregistration.k8s.io/v1alpha1" -}}
+{{- if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/MutatingAdmissionPolicy" -}}
+  {{- $apiVersion = "admissionregistration.k8s.io/v1" -}}
+{{- else if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1beta1" -}}
+  {{- $apiVersion = "admissionregistration.k8s.io/v1beta1" -}}
+{{- end -}}
+{{- $allNamespaces := list -}}
+{{- range .Values.policies.personLabel.mappings -}}
+  {{- range .namespaces -}}
+    {{- $allNamespaces = append $allNamespaces . -}}
+  {{- end -}}
+{{- end -}}
+apiVersion: {{ $apiVersion }}
+kind: MutatingAdmissionPolicy
+metadata:
+  name: add-person-label
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchConditions:
+    - name: is-target-namespace
+      expression: >-
+        request.namespace in {{ toJson $allNamespaces }}
+  variables:
+    - name: personLabel
+      expression: >-
+        {{- range $i, $m := .Values.policies.personLabel.mappings }}
+        {{- if eq $i 0 }}
+        request.namespace in {{ toJson $m.namespaces }} ? "{{ $m.labelValue }}"
+        {{- else }}
+        : request.namespace in {{ toJson $m.namespaces }} ? "{{ $m.labelValue }}"
+        {{- end }}
+        {{- end }}
+        : ""
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >-
+          Object{metadata: Object.metadata{labels: {"person": variables.personLabel}}}
+---
+apiVersion: {{ $apiVersion }}
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: add-person-label
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  policyName: add-person-label
+  matchResources:
+    namespaceSelector: {}
+{{- end }}

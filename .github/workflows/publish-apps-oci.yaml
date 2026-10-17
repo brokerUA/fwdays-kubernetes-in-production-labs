@@ -1,0 +1,93 @@
+name: Publish Application Images to GHCR
+
+on:
+  push:
+    branches:
+      - main
+      - feature/module03
+    paths:
+      - 'apps/**'
+      - '.github/workflows/publish-apps-oci.yaml'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Microservice to build and publish'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - flask-service
+          - go-service
+      version:
+        description: 'Version tag for image (e.g. latest, v1.0.0, 1.2.3)'
+        required: true
+        default: 'latest'
+        type: string
+      tag_as_latest:
+        description: 'Also tag and push as latest'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        service: [flask-service, go-service]
+    steps:
+      - name: Checkout repository
+        if: ${{ inputs.service == 'all' || inputs.service == matrix.service || github.event_name == 'push' }}
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: ${{ inputs.service == 'all' || inputs.service == matrix.service || github.event_name == 'push' }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: ${{ inputs.service == 'all' || inputs.service == matrix.service || github.event_name == 'push' }}
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ inputs.service == 'all' || inputs.service == matrix.service || github.event_name == 'push' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        if: ${{ inputs.service == 'all' || inputs.service == matrix.service || github.event_name == 'push' }}
+        run: |
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          SERVICE="${{ matrix.service }}"
+          IMAGE_NAME="ghcr.io/${OWNER_LOWER}/${SERVICE}"
+          TAG="${{ inputs.version || 'latest' }}"
+          
+          TAGS="${IMAGE_NAME}:${TAG}"
+          if [ "${{ inputs.tag_as_latest }}" = "true" ] && [ "${TAG}" != "latest" ]; then
+            TAGS="${TAGS},${IMAGE_NAME}:latest"
+          fi
+          
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "image_name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Docker image
+        if: ${{ inputs.service == 'all' || inputs.service == matrix.service || github.event_name == 'push' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/${{ matrix.service }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=${{ matrix.service }}
+            org.opencontainers.image.description=Production microservice container for ${{ matrix.service }}

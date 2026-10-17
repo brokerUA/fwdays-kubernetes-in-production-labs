@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SecurityPoliciesValues",
+  "type": "object",
+  "required": ["namespaces", "serviceAccounts", "rbac", "policies"],
+  "properties": {
+    "namespaces": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "serviceAccounts": {
+      "type": "object",
+      "required": ["createTokens", "accounts"],
+      "properties": {
+        "createTokens": {
+          "type": "boolean"
+        },
+        "accounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "namespace"],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "namespace": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "rbac": {
+      "type": "object",
+      "required": ["commonRules", "roles", "bindings"],
+      "properties": {
+        "commonRules": {
+          "type": "array"
+        },
+        "roles": {
+          "type": "array"
+        },
+        "bindings": {
+          "type": "array"
+        }
+      }
+    },
+    "policies": {
+      "type": "object",
+      "properties": {
+        "readonlyRootfs": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "validationFailureAction": {
+              "type": "string",
+              "enum": ["Audit", "Enforce"]
+            },
+            "message": {
+              "type": "string"
+            }
+          }
+        },
+        "personLabel": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "validationFailureAction": {
+              "type": "string",
+              "enum": ["Audit", "Enforce"]
+            },
+            "mappings": {
+              "type": "array"
+            }
+          }
+        }
+      }
+    }
+  }
+}

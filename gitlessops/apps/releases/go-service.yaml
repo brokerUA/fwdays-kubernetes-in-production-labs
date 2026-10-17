@@ -1,0 +1,28 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: go-service
+  namespace: flux-system
+spec:
+  targetNamespace: student01
+  interval: 5m
+  chartRef:
+    kind: OCIRepository
+    name: app-service
+    namespace: flux-system
+  dependsOn:
+    - name: security-policies
+      namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    image:
+      repository: ghcr.io/${OCI_REGISTRY_OWNER:=brokerua}/go-service
+      tag: latest
+    service:
+      port: 8080
+      targetPort: 8080

@@ -8,9 +8,20 @@ kubeconfig-*.yaml
 */**/.terraform/
 */**/*.tfvars
 */**/admin.kubeconfig
+*/**/*-config
 
 # Environment variables / secrets
 .env
+
+# Go binaries & build artifacts
+apps/go-service/go-service
+apps/go-service/server
+*.exe
+*.test
+
+# Helm packaging temporary files
+.cr-release-packages/
+*.tgz
 
 # IDE
 .idea/

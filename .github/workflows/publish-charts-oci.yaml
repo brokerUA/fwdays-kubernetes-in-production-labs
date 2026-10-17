@@ -1,0 +1,79 @@
+name: Publish OCI Helm Charts to GHCR
+
+on:
+  push:
+    branches:
+      - main
+      - feature/module03
+    paths:
+      - 'charts/**'
+      - '.github/workflows/publish-charts-oci.yaml'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Override Helm chart version (optional, leave empty to use version from Chart.yaml)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-charts:
+    runs-on: ubuntu-slim
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v4.3.1
+
+      - name: Log in to GitHub Container Registry (Helm OCI)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Lint, Package, and Push Charts
+        run: |
+          mkdir -p .cr-release-packages
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          CREATED_AT=$(date -u +%FT%TZ)
+          
+          for chart_dir in charts/*; do
+            if [ -d "$chart_dir" ] && [ -f "$chart_dir/Chart.yaml" ]; then
+              chart_name=$(basename "$chart_dir")
+              echo "=========================================================="
+              echo "==> Processing chart: $chart_name"
+              echo "=========================================================="
+              
+              # Inject dynamic OCI provenance annotations into Chart.yaml before packaging
+              {
+                echo "  org.opencontainers.image.source: \"${REPO_URL}\""
+                echo "  org.opencontainers.image.revision: \"${{ github.sha }}\""
+                echo "  org.opencontainers.image.created: \"${CREATED_AT}\""
+              } >> "$chart_dir/Chart.yaml"
+              
+              # Build dependencies if present and lint chart
+              if [ -f "$chart_dir/Chart.lock" ] || [ -d "$chart_dir/charts" ]; then
+                helm dependency build "$chart_dir"
+              fi
+              helm lint "$chart_dir"
+              
+              # Package chart into release directory
+              if [ -n "${{ inputs.version }}" ]; then
+                echo "==> Packaging chart with custom version: ${{ inputs.version }}"
+                helm package "$chart_dir" --version "${{ inputs.version }}" --destination .cr-release-packages
+              else
+                helm package "$chart_dir" --destination .cr-release-packages
+              fi
+              
+              # Find packaged file and push to GHCR OCI
+              pkg_file=$(ls -1 .cr-release-packages/${chart_name}-*.tgz | tail -n 1)
+              echo "==> Pushing $pkg_file to oci://ghcr.io/${OWNER_LOWER}/charts"
+              helm push "$pkg_file" "oci://ghcr.io/${OWNER_LOWER}/charts"
+            fi
+          done

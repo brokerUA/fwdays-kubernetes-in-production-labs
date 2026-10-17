@@ -1,0 +1,28 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: flask-service
+  namespace: flux-system
+spec:
+  targetNamespace: student01
+  interval: 5m
+  chartRef:
+    kind: OCIRepository
+    name: app-service
+    namespace: flux-system
+  dependsOn:
+    - name: security-policies
+      namespace: flux-system
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    image:
+      repository: ghcr.io/${OCI_REGISTRY_OWNER:=brokerua}/flask-service
+      tag: latest
+    service:
+      port: 5000
+      targetPort: 5000
