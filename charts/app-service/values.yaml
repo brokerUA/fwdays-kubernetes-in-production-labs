@@ -1,0 +1,16 @@
+replicaCount: 1
+
+image:
+  repository: ""
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+securityContext:
+  readOnlyRootFilesystem: false
+
+resources: {}

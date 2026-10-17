@@ -1,0 +1,10 @@
+apiVersion: v2
+name: app-service
+description: Generic reusable Helm chart for microservices
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+annotations:
+  org.opencontainers.image.title: "app-service"
+  org.opencontainers.image.description: "Reusable multi-tenant workload chart for microservices"
+  org.opencontainers.image.licenses: "Apache-2.0"

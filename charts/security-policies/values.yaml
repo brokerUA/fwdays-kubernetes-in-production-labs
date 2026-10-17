@@ -1,0 +1,109 @@
+# Default values for security-policies.
+
+namespaces:
+  - mentor
+  - student01
+  - student02
+  - student03
+
+serviceAccounts:
+  createTokens: true
+  accounts:
+    - name: mentor
+      namespace: mentor
+    - name: student01
+      namespace: student01
+    - name: student02
+      namespace: student02
+    - name: student03
+      namespace: student03
+
+rbac:
+  commonRules:
+    - apiGroups: [""]
+      resources: ["pods", "services", "configmaps", "secrets"]
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+  roles:
+    - name: rw-role
+      namespaces:
+        - student01
+        - student02
+        - student03
+      verbs:
+        - get
+        - list
+        - watch
+        - create
+        - update
+        - patch
+        - delete
+    - name: ro-role
+      namespaces:
+        - student01
+        - default
+      verbs:
+        - get
+        - list
+        - watch
+  bindings:
+    - name: mentor-rw
+      namespace: student01
+      role: rw-role
+      serviceAccount:
+        name: mentor
+        namespace: mentor
+    - name: mentor-rw
+      namespace: student02
+      role: rw-role
+      serviceAccount:
+        name: mentor
+        namespace: mentor
+    - name: mentor-rw
+      namespace: student03
+      role: rw-role
+      serviceAccount:
+        name: mentor
+        namespace: mentor
+    - name: student01-rw
+      namespace: student01
+      role: rw-role
+      serviceAccount:
+        name: student01
+        namespace: student01
+    - name: student02-ro
+      namespace: student01
+      role: ro-role
+      serviceAccount:
+        name: student02
+        namespace: student02
+    - name: student02-ro
+      namespace: default
+      role: ro-role
+      serviceAccount:
+        name: student02
+        namespace: student02
+    - name: student03-rw
+      namespace: student03
+      role: rw-role
+      serviceAccount:
+        name: student03
+        namespace: student03
+
+policies:
+  readonlyRootfs:
+    enabled: true
+    validationFailureAction: Audit
+    message: "Containers must use a read-only root filesystem."
+  personLabel:
+    enabled: true
+    validationFailureAction: Enforce
+    mappings:
+      - labelValue: student
+        namespaces:
+          - student01
+          - student02
+          - student03
+      - labelValue: mentor
+        namespaces:
+          - mentor

@@ -1,0 +1,37 @@
+{{- if .Values.policies.readonlyRootfs.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: require-readonly-rootfs
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    - expression: "object.spec.containers.all(c, has(c.securityContext) && has(c.securityContext.readOnlyRootFilesystem) && c.securityContext.readOnlyRootFilesystem == true)"
+      message: {{ .Values.policies.readonlyRootfs.message | default "Containers must use a read-only root filesystem." | quote }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: require-readonly-rootfs
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  policyName: require-readonly-rootfs
+  validationActions:
+    {{- if eq .Values.policies.readonlyRootfs.validationFailureAction "Enforce" }}
+    - Deny
+    {{- else }}
+    - Audit
+    - Warn
+    {{- end }}
+  matchResources:
+    namespaceSelector: {}
+{{- end }}

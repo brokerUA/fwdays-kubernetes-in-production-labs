@@ -1,0 +1,10 @@
+apiVersion: v2
+name: security-policies
+description: Helm chart managing namespaces, RBAC, and native admission policies (ValidatingAdmissionPolicy, MutatingAdmissionPolicy) for lab environments
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+annotations:
+  org.opencontainers.image.title: "security-policies"
+  org.opencontainers.image.description: "Native Kubernetes Admission Policies (CEL) and multi-tenant RBAC baseline"
+  org.opencontainers.image.licenses: "Apache-2.0"

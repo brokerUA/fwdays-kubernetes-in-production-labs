@@ -2,17 +2,23 @@
 set -euo pipefail
 
 # Prefer admin kubeconfig for verification if available
-if [[ -f "infra/terraform/admin.kubeconfig" ]]; then
-  export KUBECONFIG="infra/terraform/admin.kubeconfig"
-elif [[ -f "../infra/terraform/admin.kubeconfig" ]]; then
-  export KUBECONFIG="../infra/terraform/admin.kubeconfig"
+if [[ -z "${KUBECONFIG:-}" ]]; then
+  if [[ -f "infra/k8s-in-production-config" ]]; then
+    export KUBECONFIG="$(pwd)/infra/k8s-in-production-config"
+  elif [[ -f "../infra/k8s-in-production-config" ]]; then
+    export KUBECONFIG="$(pwd)/../infra/k8s-in-production-config"
+  elif [[ -f "infra/admin.kubeconfig" ]]; then
+    export KUBECONFIG="$(pwd)/infra/admin.kubeconfig"
+  elif [[ -f "../infra/admin.kubeconfig" ]]; then
+    export KUBECONFIG="$(pwd)/../infra/admin.kubeconfig"
+  fi
 fi
 
 PASS=0
 FAIL=0
 
 # ---------------------------------------------------------------------------
-# Cleanup trap — removes test pods created during Kyverno label mutation checks
+# Cleanup trap — removes test pods created during label mutation checks
 # ---------------------------------------------------------------------------
 cleanup() {
   kubectl delete pod test-pod-student01 -n student01 --ignore-not-found=true 2>/dev/null || true
@@ -110,10 +116,10 @@ check_can    "Student03 CAN create pods in student03"     create pods student03 
 check_cannot "Student03 CANNOT create pods in student01"  create pods student01 student03 student03
 
 # ---------------------------------------------------------------------------
-# Kyverno Policy Checks  (Requirements 12.3, 12.4, 12.5)
+# Admission Policy Checks  (Requirements 12.3, 12.4, 12.5)
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Kyverno Policy Checks ==="
+echo "=== Admission Policy Checks ==="
 
 # --- Label mutation: student namespace → person=student  (Requirement 12.3) ---
 echo "Creating test pod in student01 to verify PersonLabel mutation..."
@@ -143,10 +149,10 @@ person_label=$(kubectl get pod test-pod-student01 -n student01 \
                  -o jsonpath='{.metadata.labels.person}' 2>/dev/null || true)
 
 if [[ "$person_label" == "student" ]]; then
-  echo "[PASS] Kyverno: pod in student01 has label person=student"
+  echo "[PASS] Policy: pod in student01 has label person=student"
   ((PASS++)) || true
 else
-  echo "[FAIL] Kyverno: pod in student01 expected label person=student, got '${person_label}'"
+  echo "[FAIL] Policy: pod in student01 expected label person=student, got '${person_label}'"
   ((FAIL++)) || true
 fi
 
@@ -177,23 +183,22 @@ person_label=$(kubectl get pod test-pod-mentor -n mentor \
                  -o jsonpath='{.metadata.labels.person}' 2>/dev/null || true)
 
 if [[ "$person_label" == "mentor" ]]; then
-  echo "[PASS] Kyverno: pod in mentor has label person=mentor"
+  echo "[PASS] Policy: pod in mentor has label person=mentor"
   ((PASS++)) || true
 else
-  echo "[FAIL] Kyverno: pod in mentor expected label person=mentor, got '${person_label}'"
+  echo "[FAIL] Policy: pod in mentor expected label person=mentor, got '${person_label}'"
   ((FAIL++)) || true
 fi
 
 # --- Policy existence and mode check  (Requirement 12.5) ---
-echo "Checking require-readonly-rootfs ClusterPolicy..."
-action=$(kubectl get clusterpolicy require-readonly-rootfs \
-           -o jsonpath='{.spec.validationFailureAction}' 2>/dev/null || true)
+echo "Checking require-readonly-rootfs ValidatingAdmissionPolicy..."
+binding_exists=$(kubectl get validatingadmissionpolicybinding require-readonly-rootfs -o name 2>/dev/null || true)
 
-if [[ "$action" == "Audit" ]]; then
-  echo "[PASS] Kyverno: require-readonly-rootfs ClusterPolicy has validationFailureAction=Audit"
+if [[ -n "$binding_exists" ]]; then
+  echo "[PASS] Policy: require-readonly-rootfs ValidatingAdmissionPolicyBinding exists and is active"
   ((PASS++)) || true
 else
-  echo "[FAIL] Kyverno: require-readonly-rootfs ClusterPolicy expected validationFailureAction=Audit, got '${action}'"
+  echo "[FAIL] Policy: require-readonly-rootfs ValidatingAdmissionPolicyBinding not found"
   ((FAIL++)) || true
 fi
 

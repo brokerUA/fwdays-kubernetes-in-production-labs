@@ -1,0 +1,10 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: security-policies
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: oci://ghcr.io/${OCI_REGISTRY_OWNER:=brokerua}/charts/security-policies
+  ref:
+    semver: ">=0.1.0"
