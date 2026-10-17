@@ -33,3 +33,15 @@ variable "platform_oci_tag" {
   type        = string
   default     = "latest"
 }
+
+variable "istio_version" {
+  description = "Istio Helm chart version (base and istiod control plane)"
+  type        = string
+  default     = "1.30.6"
+}
+
+variable "istio_operator_version" {
+  description = "Istio Operator component version reference"
+  type        = string
+  default     = "1.30.6"
+}

@@ -80,3 +80,4 @@ bash tests/verify-access.sh
 
 - [Module 02 – Security & Policy as Code](docs/module-02-security-policy.md)
 - [Module 03 – Platform Engineering (KinD, Flux Operator, & GitLessOps)](docs/module-03-platform-engineering.md)
+- [Module 04 – Service Mesh (Istio Sidecar & Native CEL Policies)](docs/module-04-service-mesh.md)

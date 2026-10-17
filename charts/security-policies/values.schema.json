@@ -81,6 +81,17 @@
               "type": "array"
             }
           }
+        },
+        "istioSidecar": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "targetPersonLabel": {
+              "type": "string"
+            }
+          }
         }
       }
     }

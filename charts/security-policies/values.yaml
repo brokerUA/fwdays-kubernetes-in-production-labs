@@ -107,3 +107,6 @@ policies:
       - labelValue: mentor
         namespaces:
           - mentor
+  istioSidecar:
+    enabled: true
+    targetPersonLabel: student
