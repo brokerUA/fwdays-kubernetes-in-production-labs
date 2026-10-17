@@ -16,3 +16,7 @@ run         = "bash tests/verify-access.sh"
 [tasks."test:module03"]
 description = "Verify Module 03 KinD, Flux Operator, RBAC, and native admission policies"
 run         = "bash tests/verify-module03.sh"
+
+[tasks."test:module04"]
+description = "Verify Module 04 Istio Service Mesh, CEL Mutating Admission Policy, and sidecar injection"
+run         = "bash tests/verify-module04.sh"

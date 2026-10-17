@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - feature/module03
+      - feature/*
     paths:
       - 'apps/**'
       - '.github/workflows/publish-apps-oci.yaml'

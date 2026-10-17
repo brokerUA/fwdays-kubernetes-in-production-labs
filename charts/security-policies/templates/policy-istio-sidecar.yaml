@@ -1,0 +1,45 @@
+{{- if .Values.policies.istioSidecar.enabled }}
+{{- $apiVersion := "admissionregistration.k8s.io/v1alpha1" -}}
+{{- if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/MutatingAdmissionPolicy" -}}
+  {{- $apiVersion = "admissionregistration.k8s.io/v1" -}}
+{{- else if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1beta1" -}}
+  {{- $apiVersion = "admissionregistration.k8s.io/v1beta1" -}}
+{{- end -}}
+apiVersion: {{ $apiVersion }}
+kind: MutatingAdmissionPolicy
+metadata:
+  name: inject-istio-sidecar
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: IfNeeded
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  matchConditions:
+    - name: has-student-person-label
+      expression: >-
+        has(object.metadata.labels) &&
+        has(object.metadata.labels.person) &&
+        (object.metadata.labels.person == "{{ .Values.policies.istioSidecar.targetPersonLabel | default "student" }}" || object.metadata.labels.person.startsWith("student"))
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >-
+          Object{metadata: Object.metadata{labels: {"sidecar.istio.io/inject": "true"}}}
+---
+apiVersion: {{ $apiVersion }}
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: inject-istio-sidecar
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  policyName: inject-istio-sidecar
+  matchResources:
+    namespaceSelector: {}
+{{- end }}
