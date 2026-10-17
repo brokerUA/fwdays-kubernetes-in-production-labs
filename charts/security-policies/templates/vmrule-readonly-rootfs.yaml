@@ -1,0 +1,21 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: readonly-rootfs-audit-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/instance: victoria-metrics-k8s-stack
+    role: alert-rules
+spec:
+  groups:
+    - name: security-policies.rules
+      rules:
+        - alert: ReadOnlyRootFilesystemAuditViolation
+          expr: (increase(apiserver_validating_admission_policy_check_total{policy="require-readonly-rootfs", enforcement_action="audit"}[5m]) > 0) or (increase(apiserver_admission_policy_admission_evaluations_total{policy="require-readonly-rootfs", action="Audit"}[5m]) > 0) or ((apiserver_validating_admission_policy_check_total{policy="require-readonly-rootfs", enforcement_action="audit"} > 0) and on() (count(kube_pod_status_phase{namespace=~"student.*", phase="Running"}) > 0)) or ((apiserver_admission_policy_admission_evaluations_total{policy="require-readonly-rootfs", action="Audit"} > 0) and on() (count(kube_pod_status_phase{namespace=~"student.*", phase="Running"}) > 0))
+          for: 0m
+          labels:
+            severity: warning
+            category: security-policy
+          annotations:
+            summary: "Pod admission violated require-readonly-rootfs policy"
+            description: "One or more pods were admitted in Audit mode violating the read-only root filesystem policy."

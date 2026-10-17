@@ -20,3 +20,7 @@ run         = "bash tests/verify-module03.sh"
 [tasks."test:module04"]
 description = "Verify Module 04 Istio Service Mesh, CEL Mutating Admission Policy, and sidecar injection"
 run         = "bash tests/verify-module04.sh"
+
+[tasks."test:module05"]
+description = "Verify Module 05 VictoriaMetrics K8s Stack, Grafana dashboards, MetricsQL ingestion, and CEL admission audit alerts"
+run         = "bash tests/verify-module05.sh"
