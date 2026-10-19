@@ -1,0 +1,74 @@
+{{- if .Values.policies.personLabel.enabled }}
+{{- $apiVersion := "admissionregistration.k8s.io/v1alpha1" -}}
+{{- if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1/MutatingAdmissionPolicy" -}}
+  {{- $apiVersion = "admissionregistration.k8s.io/v1" -}}
+{{- else if .Capabilities.APIVersions.Has "admissionregistration.k8s.io/v1beta1" -}}
+  {{- $apiVersion = "admissionregistration.k8s.io/v1beta1" -}}
+{{- end -}}
+{{- /*
+  A single policy decides both the `person` label and sidecar injection from the same
+  namespace mapping (variables), so the result never depends on how several
+  MutatingAdmissionPolicies are ordered. All mutations are evaluated against the
+  incoming object, hence the sidecar mutation uses `variables.*`, not the label.
+*/ -}}
+apiVersion: {{ $apiVersion }}
+kind: MutatingAdmissionPolicy
+metadata:
+  name: person-label-and-sidecar
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  failurePolicy: Fail
+  reinvocationPolicy: Never
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  variables:
+    # person label value for the pod's namespace; "" means the label must not be present
+    - name: person
+      expression: >-
+        {{- range .Values.policies.personLabel.mappings }}
+        request.namespace in {{ toJson .namespaces }} ? {{ .labelValue | quote }} :
+        {{- end }}
+        ""
+    # whether pods of the pod's namespace get the Istio sidecar
+    - name: injectSidecar
+      expression: >-
+        {{- range .Values.policies.personLabel.mappings }}
+        request.namespace in {{ toJson .namespaces }} ? {{ ternary "true" "false" (default false .injectSidecar) }} :
+        {{- end }}
+        false
+  mutations:
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >-
+          variables.person != ""
+          ? Object{metadata: Object.metadata{labels: {"person": variables.person}}}
+          : Object{}
+    - patchType: ApplyConfiguration
+      applyConfiguration:
+        expression: >-
+          variables.injectSidecar
+          ? Object{metadata: Object.metadata{labels: {"sidecar.istio.io/inject": "true"}}}
+          : Object{}
+    - patchType: JSONPatch
+      jsonPatch:
+        expression: >-
+          variables.person == "" && has(object.metadata.labels) && "person" in object.metadata.labels
+          ? [JSONPatch{op: "remove", path: "/metadata/labels/person"}]
+          : []
+---
+apiVersion: {{ $apiVersion }}
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: person-label-and-sidecar
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  policyName: person-label-and-sidecar
+  matchResources:
+    namespaceSelector: {}
+{{- end }}
