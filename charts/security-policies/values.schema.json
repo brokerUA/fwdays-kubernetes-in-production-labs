@@ -78,18 +78,25 @@
               "enum": ["Audit", "Enforce"]
             },
             "mappings": {
-              "type": "array"
-            }
-          }
-        },
-        "istioSidecar": {
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "targetPersonLabel": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["labelValue", "namespaces"],
+                "properties": {
+                  "labelValue": {
+                    "type": "string"
+                  },
+                  "injectSidecar": {
+                    "type": "boolean"
+                  },
+                  "namespaces": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
             }
           }
         }

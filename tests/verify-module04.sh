@@ -25,6 +25,7 @@ FAIL=0
 cleanup() {
   kubectl delete pod test-istio-student01 -n student01 --ignore-not-found=true 2>/dev/null || true
   kubectl delete pod test-istio-mentor    -n mentor    --ignore-not-found=true 2>/dev/null || true
+  kubectl delete pod test-istio-other     -n default   --ignore-not-found=true 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -83,17 +84,26 @@ fi
 echo ""
 echo "=== Phase 3: Native CEL Admission Policy Checks ==="
 
-if kubectl get mutatingadmissionpolicy inject-istio-sidecar >/dev/null 2>&1; then
-  log_pass "CEL MutatingAdmissionPolicy 'inject-istio-sidecar' is defined"
+if kubectl get mutatingadmissionpolicy person-label-and-sidecar >/dev/null 2>&1; then
+  log_pass "CEL MutatingAdmissionPolicy 'person-label-and-sidecar' is defined"
 else
-  log_fail "CEL MutatingAdmissionPolicy 'inject-istio-sidecar' not found"
+  log_fail "CEL MutatingAdmissionPolicy 'person-label-and-sidecar' not found"
 fi
 
-if kubectl get mutatingadmissionpolicybinding inject-istio-sidecar >/dev/null 2>&1; then
-  log_pass "CEL MutatingAdmissionPolicyBinding 'inject-istio-sidecar' is defined"
+if kubectl get mutatingadmissionpolicybinding person-label-and-sidecar >/dev/null 2>&1; then
+  log_pass "CEL MutatingAdmissionPolicyBinding 'person-label-and-sidecar' is defined"
 else
-  log_fail "CEL MutatingAdmissionPolicyBinding 'inject-istio-sidecar' not found"
+  log_fail "CEL MutatingAdmissionPolicyBinding 'person-label-and-sidecar' not found"
 fi
+
+# The two legacy policies depended on admission ordering and must be gone
+for legacy in add-person-label inject-istio-sidecar; do
+  if kubectl get mutatingadmissionpolicy "$legacy" >/dev/null 2>&1; then
+    log_fail "Legacy order-dependent MutatingAdmissionPolicy '$legacy' still exists"
+  else
+    log_pass "Legacy MutatingAdmissionPolicy '$legacy' is removed"
+  fi
+done
 
 # ------------------------------------------------------------------------------
 # 4. Automated Sidecar Injection for Student Workload
@@ -171,6 +181,61 @@ if [[ "$MENTOR_INJECT_LABEL" != "true" && ! "$MENTOR_CONTAINERS" =~ "istio-proxy
   log_pass "Non-student pod (mentor) is exempted from automatic sidecar injection (containers: ${MENTOR_CONTAINERS})"
 else
   log_fail "Non-student pod received unexpected sidecar injection (inject label: '${MENTOR_INJECT_LABEL}', containers: '${MENTOR_CONTAINERS}')"
+fi
+
+MENTOR_PERSON=$(kubectl get pod test-istio-mentor -n mentor -o jsonpath='{.metadata.labels.person}' 2>/dev/null || true)
+if [[ "$MENTOR_PERSON" == "mentor" ]]; then
+  log_pass "Pod in mentor automatically received label person=mentor"
+else
+  log_fail "Pod in mentor missing person=mentor label (got: '${MENTOR_PERSON}')"
+fi
+
+# ------------------------------------------------------------------------------
+# 6. Other Namespaces: no 'person' label at all, even if the pod brings its own
+# ------------------------------------------------------------------------------
+echo ""
+echo "=== Phase 6: Other Namespaces Must Not Carry the 'person' Label ==="
+
+kubectl delete pod test-istio-other -n default --ignore-not-found=true >/dev/null 2>&1 || true
+
+cat <<EOF | kubectl apply -n default -f - >/dev/null 2>&1 || true
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-istio-other
+  labels:
+    person: student
+    keep: me
+spec:
+  containers:
+    - name: test-app
+      image: alpine:latest
+      command: ["sh", "-c", "sleep 3600"]
+      securityContext:
+        readOnlyRootFilesystem: true
+EOF
+
+OTHER_PERSON=$(kubectl get pod test-istio-other -n default -o jsonpath='{.metadata.labels.person}' 2>/dev/null || true)
+OTHER_KEEP=$(kubectl get pod test-istio-other -n default -o jsonpath='{.metadata.labels.keep}' 2>/dev/null || true)
+OTHER_INJECT=$(kubectl get pod test-istio-other -n default -o jsonpath='{.metadata.labels.sidecar\.istio\.io/inject}' 2>/dev/null || true)
+OTHER_CONTAINERS=$(kubectl get pod test-istio-other -n default -o jsonpath='{.spec.initContainers[*].name} {.spec.containers[*].name}' 2>/dev/null || true)
+
+if [[ -z "$OTHER_PERSON" ]]; then
+  log_pass "Pod-supplied person label is removed in a non-tenant namespace (default)"
+else
+  log_fail "Pod in 'default' still carries person='${OTHER_PERSON}'"
+fi
+
+if [[ "$OTHER_KEEP" == "me" ]]; then
+  log_pass "Unrelated pod labels are preserved"
+else
+  log_fail "Unrelated pod label 'keep' was lost (got: '${OTHER_KEEP}')"
+fi
+
+if [[ "$OTHER_INJECT" != "true" && ! "$OTHER_CONTAINERS" =~ "istio-proxy" ]]; then
+  log_pass "Pod in non-tenant namespace is not injected with a sidecar"
+else
+  log_fail "Pod in 'default' unexpectedly got a sidecar (inject label: '${OTHER_INJECT}', containers: '${OTHER_CONTAINERS}')"
 fi
 
 # ------------------------------------------------------------------------------

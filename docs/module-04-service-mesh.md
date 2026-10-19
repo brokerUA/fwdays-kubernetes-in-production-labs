@@ -15,8 +15,10 @@ Module 04 implements a high-efficiency service mesh architecture with zero exter
 
 2. **Native Admission Policy Layer (`charts/security-policies/`)**:
    - Evaluates admission rules natively within `kube-apiserver` using Kubernetes CEL.
-   - Chains the `add-person-label` mutating policy (assigning `person: student`) with the `inject-istio-sidecar` mutating policy (mutating `sidecar.istio.io/inject: "true"`).
-   - Utilizes `reinvocationPolicy: IfNeeded` to guarantee automatic sidecar injection enablement even when person labels are applied during the same admission evaluation cycle.
+   - A single `person-label-and-sidecar` mutating policy decides, from one namespace mapping (`policies.personLabel.mappings`), both the `person` label and the sidecar enablement label (`sidecar.istio.io/inject: "true"`).
+   - Namespaces in a mapping get `person=<labelValue>`; in every other namespace the `person` label is removed, even if a pod brings its own.
+   - Sidecar enablement is set only for mappings with `injectSidecar: true` (the `student` mapping), so it is always consistent with `person: student`.
+   - **Why one policy:** several `MutatingAdmissionPolicy` objects have no documented evaluation order, and `reinvocationPolicy: IfNeeded` did not reliably re-run a policy after a sibling policy added a label. Two chained policies (`add-person-label` then `inject-istio-sidecar`) therefore left pods without a sidecar. All mutations of one policy are evaluated against the incoming object, so the sidecar mutation reads the shared `variables`, never the label another policy may or may not have added yet.
 
 3. **Istio Mutating Webhook**:
    - Intercepts pods labeled with `sidecar.istio.io/inject: "true"` and injects the `istio-proxy` sidecar container (resulting in `2/2` ready containers per pod).
@@ -29,18 +31,15 @@ graph TD
   end
 
   subgraph SecurityPolicies[charts/security-policies Helm Chart]
-    MAP_Person[CEL MAP: add-person-label<br/>Attaches person: student]
-    MAP_Istio[CEL MAP: inject-istio-sidecar<br/>Attaches sidecar.istio.io/inject: true]
+    MAP[CEL MAP: person-label-and-sidecar<br/>person label per namespace mapping<br/>+ sidecar.istio.io/inject for student]
   end
 
   subgraph AdmissionFlow[Workload Admission Lifecycle]
     Client[Deploy Workload Pod] --> APIServer[kube-apiserver Admission Pipeline]
-    APIServer -->|1. Evaluate Namespace| MAP_Person
-    MAP_Person -->|2. Mutate person=student| APIServer
-    APIServer -->|3. Evaluate person=student| MAP_Istio
-    MAP_Istio -->|4. Mutate sidecar.istio.io/inject=true| APIServer
-    APIServer -->|5. Trigger Webhook| Injector[Istio Sidecar Injector Webhook]
-    Injector -->|6. Inject istio-proxy| RunningPod[Running Pod: app + istio-proxy]
+    APIServer -->|1. Evaluate namespace mapping| MAP
+    MAP -->|2. Mutate person + sidecar.istio.io/inject| APIServer
+    APIServer -->|3. Trigger Webhook| Injector[Istio Sidecar Injector Webhook]
+    Injector -->|4. Inject istio-proxy| RunningPod[Running Pod: app + istio-proxy]
   end
 ```
 
@@ -84,34 +83,37 @@ graph TD
 
 ## Step 2: Deploy Security Policies with Sidecar Injection Rule
 
-The security policies chart includes the native CEL mutating policy:
+The security policies chart (`charts/security-policies/templates/policy-person-label-and-sidecar.yaml`) renders one native CEL mutating policy from `values.yaml`:
 
 ```yaml
-# charts/security-policies/templates/policy-istio-sidecar.yaml
-apiVersion: admissionregistration.k8s.io/v1beta1
-kind: MutatingAdmissionPolicy
-metadata:
-  name: inject-istio-sidecar
-spec:
-  failurePolicy: Fail
-  reinvocationPolicy: IfNeeded
-  matchConstraints:
-    resourceRules:
-      - apiGroups: [""]
-        apiVersions: ["v1"]
-        operations: ["CREATE", "UPDATE"]
-        resources: ["pods"]
-  matchConditions:
-    - name: has-student-person-label
-      expression: >-
-        has(object.metadata.labels) &&
-        has(object.metadata.labels.person) &&
-        (object.metadata.labels.person == "student" || object.metadata.labels.person.startsWith("student"))
-  mutations:
-    - patchType: ApplyConfiguration
-      applyConfiguration:
-        expression: >-
-          Object{metadata: Object.metadata{labels: {"sidecar.istio.io/inject": "true"}}}
+policies:
+  personLabel:
+    mappings:
+      - labelValue: student
+        injectSidecar: true
+        namespaces: [student01, student02, student03]
+      - labelValue: mentor
+        injectSidecar: false
+        namespaces: [mentor]
+```
+
+```yaml
+# rendered MutatingAdmissionPolicy (abridged)
+variables:
+  - name: person
+    expression: request.namespace in ["student01","student02","student03"] ? "student" : request.namespace in ["mentor"] ? "mentor" : ""
+  - name: injectSidecar
+    expression: request.namespace in ["student01","student02","student03"] ? true : request.namespace in ["mentor"] ? false : false
+mutations:
+  - patchType: ApplyConfiguration   # set person
+    applyConfiguration:
+      expression: 'variables.person != "" ? Object{metadata: Object.metadata{labels: {"person": variables.person}}} : Object{}'
+  - patchType: ApplyConfiguration   # enable sidecar injection
+    applyConfiguration:
+      expression: 'variables.injectSidecar ? Object{metadata: Object.metadata{labels: {"sidecar.istio.io/inject": "true"}}} : Object{}'
+  - patchType: JSONPatch            # no person label outside the mapping
+    jsonPatch:
+      expression: 'variables.person == "" && has(object.metadata.labels) && "person" in object.metadata.labels ? [JSONPatch{op: "remove", path: "/metadata/labels/person"}] : []'
 ```
 
 Deploy or upgrade via Helm:
@@ -138,9 +140,10 @@ bash tests/verify-module04.sh
 ### What the Test Validates:
 1. **Cluster Accessibility**: Verifies multi-node KinD cluster status.
 2. **Control Plane Health**: Confirms `istio-system` namespace, `istiod` readiness, and active `istio-sidecar-injector` mutating webhook.
-3. **Admission Policy Registration**: Checks `inject-istio-sidecar` `MutatingAdmissionPolicy` and `MutatingAdmissionPolicyBinding`.
+3. **Admission Policy Registration**: Checks the `person-label-and-sidecar` `MutatingAdmissionPolicy` and binding, and that the legacy `add-person-label` / `inject-istio-sidecar` policies are gone.
 4. **Student Workload Injection**: Deploys a pod in `student01`, checks `person: student` label assignment, validates `sidecar.istio.io/inject: "true"` mutation, and verifies `istio-proxy` injection.
-5. **Non-Student Exemption**: Deploys a pod in `mentor` and confirms that no sidecar is injected.
+5. **Non-Student Exemption**: Deploys a pod in `mentor`, confirms `person=mentor` and that no sidecar is injected.
+6. **Other Namespaces**: Deploys a pod in `default` that brings `person: student` and confirms the label is removed (other labels kept) and no sidecar is injected.
 
 ---
 

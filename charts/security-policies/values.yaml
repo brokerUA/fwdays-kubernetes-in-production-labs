@@ -95,18 +95,19 @@ policies:
     enabled: true
     validationFailureAction: Audit
     message: "Containers must use a read-only root filesystem."
+  # Single MutatingAdmissionPolicy (person-label-and-sidecar): sets `person` per namespace mapping,
+  # removes it in every other namespace, and adds sidecar.istio.io/inject=true where injectSidecar is true.
   personLabel:
     enabled: true
     validationFailureAction: Enforce
     mappings:
       - labelValue: student
+        injectSidecar: true
         namespaces:
           - student01
           - student02
           - student03
       - labelValue: mentor
+        injectSidecar: false
         namespaces:
           - mentor
-  istioSidecar:
-    enabled: true
-    targetPersonLabel: student
